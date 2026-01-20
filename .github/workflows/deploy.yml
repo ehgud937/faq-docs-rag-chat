@@ -21,19 +21,24 @@ jobs:
         command_timeout: 30m
         script: |
           cd ~/faq-docs-rag-chat
-          
-          # 최신 코드 가져오기
           git pull origin master
           
-          # 기존 컨테이너 중지 및 삭제
-          docker stop faq-chat || true
-          docker rm faq-chat || true
+          # 변경 파일 확인
+          CHANGED_FILES=$(git diff HEAD@{1} --name-only)
           
-          # 이전 이미지 삭제
-          docker rmi faq-rag-chat || true
-          
-          # 새 이미지 빌드
-          docker build --no-cache -t faq-rag-chat .
+          # Dockerfile이나 requirements.txt 변경 시에만 재빌드
+          if echo "$CHANGED_FILES" | grep -qE "requirements.txt|Dockerfile"; then
+            echo "📦 Dependencies changed - full rebuild"
+            docker stop faq-chat || true
+            docker rm faq-chat || true
+            docker rmi faq-rag-chat || true
+            docker build -t faq-rag-chat .
+          else
+            echo "♻️ Code only changed - quick rebuild with cache"
+            docker stop faq-chat || true
+            docker rm faq-chat || true
+            docker build -t faq-rag-chat .  # 캐시 사용!
+          fi
           
           # 컨테이너 실행
           docker run -d \
@@ -44,10 +49,7 @@ jobs:
             --restart unless-stopped \
             faq-rag-chat
           
-          # 사용하지 않는 이미지 정리
           docker image prune -f
-          
-          # 실행 확인
           sleep 5
           docker ps | grep faq-chat
           echo "✅ Deployment completed!"

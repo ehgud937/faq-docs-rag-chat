@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSAFY FAQ 챗봇</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Marked.js (마크다운 렌더링) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <style>
+        /* 커스텀 스타일 */
+        .chat-container {
+            height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        
+        .message {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .typing-indicator {
+            display: inline-block;
+        }
+        
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #9CA3AF;
+            margin: 0 2px;
+            animation: typing 1.4s infinite;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+        
+        /* 스크롤바 스타일 */
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .chat-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+        
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        /* 마크다운 스타일 */
+        .markdown-content {
+            line-height: 1.6;
+        }
+        
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3 {
+            font-weight: bold;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
+        
+        .markdown-content h1 { font-size: 1.5em; }
+        .markdown-content h2 { font-size: 1.3em; }
+        .markdown-content h3 { font-size: 1.1em; }
+        
+        .markdown-content p {
+            margin-bottom: 0.8em;
+        }
+        
+        .markdown-content ul,
+        .markdown-content ol {
+            margin-left: 1.5em;
+            margin-bottom: 0.8em;
+        }
+        
+        .markdown-content li {
+            margin-bottom: 0.3em;
+        }
+        
+        .markdown-content strong {
+            font-weight: 600;
+            color: #1F2937;
+        }
+        
+        .markdown-content code {
+            background-color: #F3F4F6;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .markdown-content pre {
+            background-color: #F3F4F6;
+            padding: 1em;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin-bottom: 0.8em;
+        }
+        
+        .markdown-content pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        /* 모달 애니메이션 */
+        .modal {
+            animation: modalFadeIn 0.2s ease-out;
+        }
+        
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* 참고 FAQ 카드 호버 */
+        .faq-card {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .faq-card:hover {
+            background-color: #EFF6FF;
+            transform: translateX(3px);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- 컨테이너 -->
+    <div class="max-w-4xl mx-auto p-4">
+        <!-- 헤더 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <i class="fas fa-robot text-white text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">SSAFY FAQ 챗봇</h1>
+                        <p class="text-sm text-gray-500">AI 기반 질의응답 시스템</p>
+                    </div>
+                </div>
+                
+                <!-- 카테고리 선택 -->
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm text-gray-600">카테고리:</label>
+                    <select id="categoryFilter" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">전체</option>
+                        <option value="BE">Backend</option>
+                        <option value="FE">Frontend</option>
+                        <option value="DB">Database</option>
+                        <option value="Infra">Infra</option>
+                        <option value="기획/설계">기획/설계</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 채팅 영역 -->
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <!-- 메시지 컨테이너 -->
+            <div id="chatContainer" class="chat-container p-6 space-y-4">
+                <!-- 초기 메시지 -->
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-robot text-white text-sm"></i>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg px-4 py-3 max-w-md">
+                        <p class="text-gray-800">안녕하세요! 👋 SSAFY FAQ 챗봇입니다.</p>
+                        <p class="text-gray-800 mt-2">궁금한 점을 질문해주세요!</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 입력 영역 -->
+            <div class="border-t border-gray-200 p-4 bg-gray-50">
+                <div class="flex space-x-3">
+                    <input 
+                        type="text" 
+                        id="userInput" 
+                        placeholder="질문을 입력하세요... (예: JWT 토큰이 디코딩되는데 이게 맞나요?)"
+                        class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onkeypress="handleKeyPress(event)"
+                    >
+                    <button 
+                        onclick="sendMessage()"
+                        class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-2 font-medium shadow-md hover:shadow-lg"
+                    >
+                        <i class="fas fa-paper-plane"></i>
+                        <span>전송</span>
+                    </button>
+                </div>
+                
+                <!-- 추천 질문 -->
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <span class="text-xs text-gray-500">추천 질문:</span>
+                    <button onclick="setQuestion('JWT 토큰이 디코딩되는데 이게 맞나요?')" class="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors">
+                        JWT 토큰 디코딩
+                    </button>
+                    <button onclick="setQuestion('Spring JPA OneToMany에서 부모 삭제가 안돼요')" class="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors">
+                        JPA 삭제 문제
+                    </button>
+                    <button onclick="setQuestion('React useEffect가 여러 번 호출돼요')" class="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors">
+                        React useEffect
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 푸터 -->
+        <div class="text-center mt-4 text-sm text-gray-500">
+            <p>Powered by FastAPI + FAISS + OpenAI</p>
+        </div>
+    </div>
+
+    <!-- FAQ 상세 모달 -->
+    <div id="faqModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="modal bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <!-- 모달 헤더 -->
+            <div class="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <i class="fas fa-file-alt text-white"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800">FAQ 상세 정보</h2>
+                </div>
+                <button onclick="closeFaqModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            
+            <!-- 모달 내용 -->
+            <div class="p-6">
+                <!-- 메타 정보 -->
+                <div class="flex flex-wrap gap-2 mb-6">
+                    <span id="modalCategory" class="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full"></span>
+                    <span id="modalDomain" class="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full"></span>
+                    <span id="modalCohort" class="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full"></span>
+                    <span id="modalAuthor" class="px-3 py-1 bg-orange-100 text-orange-800 text-sm font-medium rounded-full"></span>
+                </div>
+                
+                <!-- 키워드 -->
+                <div class="mb-6">
+                    <h3 class="text-sm font-semibold text-gray-500 mb-2">🏷️ 키워드</h3>
+                    <div id="modalKeywords" class="flex flex-wrap gap-2">
+                        <!-- 키워드 동적 추가 -->
+                    </div>
+                </div>
+                
+                <!-- 질문 -->
+                <div class="mb-6">
+                    <h3 class="text-sm font-semibold text-gray-500 mb-2">❓ 질문</h3>
+                    <div id="modalQuestion" class="bg-gray-50 rounded-lg p-4 text-gray-800"></div>
+                </div>
+                
+                <!-- 답변 -->
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-500 mb-2">💡 답변</h3>
+                    <div id="modalAnswer" class="bg-blue-50 rounded-lg p-4 text-gray-800 markdown-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========================================
+        // 설정
+        // ========================================
+        const API_BASE_URL = 'http://localhost:8000';
+        
+        // Marked.js 설정
+        marked.setOptions({
+            breaks: true,  // 줄바꿈을 <br>로 변환
+            gfm: true      // GitHub Flavored Markdown
+        });
+        
+        // ========================================
+        // DOM 요소
+        // ========================================
+        const chatContainer = document.getElementById('chatContainer');
+        const userInput = document.getElementById('userInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+        
+        // ========================================
+        // 메시지 추가 함수
+        // ========================================
+        function addMessage(text, isUser = false, sources = null) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex items-start space-x-3 message';
+            
+            if (isUser) {
+                // 사용자 메시지
+                messageDiv.classList.add('flex-row-reverse', 'space-x-reverse');
+                messageDiv.innerHTML = `
+                    <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-user text-white text-sm"></i>
+                    </div>
+                    <div class="bg-blue-500 text-white rounded-lg px-4 py-3 max-w-md">
+                        <p>${escapeHtml(text)}</p>
+                    </div>
+                `;
+            } else {
+                // 봇 메시지 (마크다운 렌더링)
+                const renderedText = marked.parse(text);
+                
+                let sourcesHtml = '';
+                if (sources && sources.length > 0) {
+                    sourcesHtml = `
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <p class="text-xs text-gray-500 font-semibold mb-3">📚 참고 FAQ (클릭하여 상세보기):</p>
+                            ${sources.map((src, idx) => `
+                                <div class="faq-card text-xs text-gray-600 mb-2 p-3 bg-gray-50 rounded hover:shadow-md transition-all" 
+                                     onclick='openFaqModal(${JSON.stringify(src).replace(/'/g, "&apos;")})'>
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex-1">
+                                            <span class="font-semibold text-blue-600">${idx + 1}. [${escapeHtml(src.category)}]</span>
+                                            <p class="mt-1 line-clamp-2">${escapeHtml(src.question.substring(0, 80))}...</p>
+                                        </div>
+                                        <i class="fas fa-chevron-right text-gray-400 ml-2"></i>
+                                    </div>
+                                    <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                                        <span>💯 ${(src.similarity * 100).toFixed(1)}%</span>
+                                        <span>🏷️ ${escapeHtml(src.keywords.slice(0, 2).join(', '))}</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-robot text-white text-sm"></i>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg px-4 py-3 max-w-2xl">
+                        <div class="text-gray-800 markdown-content">${renderedText}</div>
+                        ${sourcesHtml}
+                    </div>
+                `;
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+        
+        // ========================================
+        // FAQ 모달 함수
+        // ========================================
+        function openFaqModal(faq) {
+            // 모달 요소
+            const modal = document.getElementById('faqModal');
+            const modalCategory = document.getElementById('modalCategory');
+            const modalDomain = document.getElementById('modalDomain');
+            const modalCohort = document.getElementById('modalCohort');
+            const modalAuthor = document.getElementById('modalAuthor');
+            const modalKeywords = document.getElementById('modalKeywords');
+            const modalQuestion = document.getElementById('modalQuestion');
+            const modalAnswer = document.getElementById('modalAnswer');
+            
+            // 데이터 채우기
+            modalCategory.textContent = `📁 ${faq.category}`;
+            modalDomain.textContent = `🌐 ${faq.domain}`;
+            modalCohort.textContent = `🎓 ${faq.cohort}`;
+            modalAuthor.textContent = `✍️ ${faq.author}`;
+            
+            // 키워드
+            modalKeywords.innerHTML = faq.keywords.map(kw => 
+                `<span class="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded">${escapeHtml(kw)}</span>`
+            ).join('');
+            
+            // 질문
+            modalQuestion.textContent = faq.question;
+            
+            // 답변 (마크다운 렌더링)
+            modalAnswer.innerHTML = marked.parse(faq.answer);
+            
+            // 모달 표시
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';  // 배경 스크롤 방지
+        }
+        
+        function closeFaqModal() {
+            const modal = document.getElementById('faqModal');
+            modal.classList.add('hidden');
+            document.body.style.overflow = 'auto';  // 스크롤 복원
+        }
+        
+        // ESC 키로 모달 닫기
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeFaqModal();
+            }
+        });
+        
+        // 모달 배경 클릭 시 닫기
+        document.getElementById('faqModal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                closeFaqModal();
+            }
+        });
+        
+        // ========================================
+        // 타이핑 인디케이터
+        // ========================================
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.id = 'typingIndicator';
+            typingDiv.className = 'flex items-start space-x-3 message';
+            typingDiv.innerHTML = `
+                <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-robot text-white text-sm"></i>
+                </div>
+                <div class="bg-gray-100 rounded-lg px-4 py-3">
+                    <div class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(typingDiv);
+            scrollToBottom();
+        }
+        
+        function hideTypingIndicator() {
+            const typingDiv = document.getElementById('typingIndicator');
+            if (typingDiv) {
+                typingDiv.remove();
+            }
+        }
+        
+        // ========================================
+        // 메시지 전송
+        // ========================================
+        async function sendMessage() {
+            const question = userInput.value.trim();
+            
+            if (!question) {
+                alert('질문을 입력해주세요!');
+                return;
+            }
+            
+            // 사용자 메시지 표시
+            addMessage(question, true);
+            userInput.value = '';
+            
+            // 타이핑 표시
+            showTypingIndicator();
+            
+            try {
+                const category = categoryFilter.value || null;
+                
+                // API 호출
+                const response = await fetch(`${API_BASE_URL}/api/rag/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        k: 3,
+                        category: category,
+                        return_sources: true
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // 타이핑 숨기기
+                hideTypingIndicator();
+                
+                // 봇 응답 표시
+                addMessage(data.answer, false, data.sources);
+                
+            } catch (error) {
+                hideTypingIndicator();
+                addMessage('❌ 오류가 발생했습니다. 서버 연결을 확인해주세요.', false);
+                console.error('Error:', error);
+            }
+        }
+        
+        // ========================================
+        // 헬퍼 함수
+        // ========================================
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        function setQuestion(question) {
+            userInput.value = question;
+            userInput.focus();
+        }
+        
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

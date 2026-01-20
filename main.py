@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from api.rag_router import router as rag_router
 import logging
 
@@ -33,11 +34,7 @@ app.include_router(rag_router)
 
 @app.get("/")
 async def root():
-    return {
-        "service": "SSAFY FAQ RAG",
-        "version": "1.0.0",
-        "docs": "/docs"
-    }
+    return FileResponse("frontend/index.html")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ jobs:
           cd ~/faq-docs-rag-chat
           
           # 최신 코드 가져오기
-          git pull origin main
+          git pull origin master
           
           # 기존 컨테이너 중지 및 삭제
           docker stop faq-chat || true
@@ -32,7 +32,7 @@ jobs:
           docker rmi faq-rag-chat || true
           
           # 새 이미지 빌드
-          docker build -t faq-rag-chat .
+          docker build --no-cache -t faq-rag-chat .
           
           # 컨테이너 실행
           docker run -d \

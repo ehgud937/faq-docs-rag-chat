@@ -445,56 +445,68 @@ class RAGService:
         self, 
         question: str, 
         k: int = 3,
+        search_k: int = 10,  # ✅ 추가
         category_filter: Optional[str] = None,
-        return_sources: bool = True
+        return_sources: bool = True,
+        return_all_candidates: bool = True  # ✅ 추가
     ) -> Dict:
         """
         통합 RAG 쿼리 (Hybrid + Reranking + 답변 생성)
         
         Args:
             question: 사용자 질문
-            k: 검색할 FAQ 개수
+            k: GPT에 전달할 FAQ 개수 (답변 생성용)
+            search_k: 검색할 전체 FAQ 개수 (사용자에게 보여줄 후보)
             category_filter: 카테고리 필터
             return_sources: 출처 포함 여부
+            return_all_candidates: 모든 후보 FAQ 포함 여부
         
         Returns:
             {
                 "question": "...",
                 "answer": "...",
-                "sources": [...],
+                "sources": [...],  # 답변 생성에 사용된 상위 k개
+                "all_candidates": [...],  # 전체 검색 결과 search_k개
                 "metadata": {...}
             }
         """
         try:
-            # 1. FAQ 검색 (Hybrid + Reranking)
-            search_results = await self.search_faq(
+            # 1. FAQ 검색 (더 많이 검색)
+            all_search_results = await self.search_faq(
                 query=question,
-                k=k,
+                k=search_k,  # ✅ 전체 후보 검색
                 category_filter=category_filter,
-                use_hybrid=True,      # ✅ 하이브리드 검색
-                use_reranking=True    # ✅ 재랭킹
+                use_hybrid=True,
+                use_reranking=True
             )
             
-            # 2. 답변 생성
+            # 2. 상위 k개만 답변 생성에 사용
+            top_k_results = all_search_results[:k]
+            
+            # 3. 답변 생성
             answer = await self.generate_answer(
                 query=question,
-                context_faqs=search_results
+                context_faqs=top_k_results
             )
             
-            # 3. 결과 구성
+            # 4. 결과 구성
             result = {
                 "question": question,
                 "answer": answer,
                 "metadata": {
-                    "num_sources": len(search_results),
+                    "num_sources": len(top_k_results),
+                    "num_all_candidates": len(all_search_results),
                     "category_filter": category_filter,
-                    "top_similarity": search_results[0]['similarity'] if search_results else 0,
-                    "search_method": "hybrid + reranking"  # ✅ 검색 방법 표시
+                    "top_similarity": all_search_results[0]['similarity'] if all_search_results else 0,
+                    "search_method": "hybrid + reranking"
                 }
             }
             
             if return_sources:
-                result["sources"] = search_results
+                result["sources"] = top_k_results
+            
+            if return_all_candidates:
+                result["all_candidates"] = all_search_results  # ✅ 전체 후보 포함
             
             return result
             

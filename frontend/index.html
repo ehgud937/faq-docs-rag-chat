@@ -305,8 +305,8 @@
         
         // Marked.js 설정
         marked.setOptions({
-            breaks: true,  // 줄바꿈을 <br>로 변환
-            gfm: true      // GitHub Flavored Markdown
+            breaks: true,
+            gfm: true
         });
         
         // ========================================
@@ -319,7 +319,7 @@
         // ========================================
         // 메시지 추가 함수
         // ========================================
-        function addMessage(text, isUser = false, sources = null) {
+        function addMessage(text, isUser = false, sources = null, allCandidates = null) {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'flex items-start space-x-3 message';
             
@@ -338,29 +338,66 @@
                 // 봇 메시지 (마크다운 렌더링)
                 const renderedText = marked.parse(text);
                 
+                // sources를 유사도 순으로 정렬 ✅
+                if (sources && sources.length > 0) {
+                    sources.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
+                }
+                
+                // allCandidates도 유사도 순으로 정렬 ✅
+                if (allCandidates && allCandidates.length > 0) {
+                    allCandidates.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
+                }
+                
                 let sourcesHtml = '';
                 if (sources && sources.length > 0) {
                     sourcesHtml = `
                         <div class="mt-4 pt-4 border-t border-gray-200">
                             <p class="text-xs text-gray-500 font-semibold mb-3">📚 참고 FAQ (클릭하여 상세보기):</p>
-                            ${sources.map((src, idx) => `
-                                <div class="faq-card text-xs text-gray-600 mb-2 p-3 bg-gray-50 rounded hover:shadow-md transition-all" 
-                                     onclick='openFaqModal(${JSON.stringify(src).replace(/'/g, "&apos;")})'>
-                                    <div class="flex items-center justify-between">
-                                        <div class="flex-1">
-                                            <span class="font-semibold text-blue-600">${idx + 1}. [${escapeHtml(src.category)}]</span>
-                                            <p class="mt-1 line-clamp-2">${escapeHtml(src.question.substring(0, 80))}...</p>
+                            ${sources.map((src, idx) => {
+                                const keywords = (src.keywords || []).filter(k => k && k.trim()).slice(0, 2);
+                                const keywordText = keywords.length > 0 ? keywords.join(', ') : '없음';
+                                
+                                return `
+                                    <div class="faq-card text-xs text-gray-600 mb-2 p-3 bg-gray-50 rounded hover:shadow-md transition-all" 
+                                        onclick='openFaqModal(${JSON.stringify(src).replace(/'/g, "&#39;").replace(/"/g, "&quot;")})'>
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex-1">
+                                                <span class="font-semibold text-blue-600">${idx + 1}. [${escapeHtml(src.category)}]</span>
+                                                <p class="mt-1 line-clamp-2">${escapeHtml(src.question.substring(0, 80))}...</p>
+                                            </div>
+                                            <i class="fas fa-chevron-right text-gray-400 ml-2"></i>
                                         </div>
-                                        <i class="fas fa-chevron-right text-gray-400 ml-2"></i>
+                                        <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                                            <span>💯 ${(src.similarity * 100).toFixed(1)}%</span>
+                                            <span>🏷️ ${escapeHtml(keywordText)}</span>
+                                        </div>
                                     </div>
-                                    <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                                        <span>💯 ${(src.similarity * 100).toFixed(1)}%</span>
-                                        <span>🏷️ ${escapeHtml(src.keywords.slice(0, 2).join(', '))}</span>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
+                                `;
+                            }).join('')}
                     `;
+                    
+                    // 전체 보기 버튼 조건 수정 ✅
+                    const hasMoreCandidates = allCandidates && Array.isArray(allCandidates) && allCandidates.length > sources.length;
+                    
+                    if (hasMoreCandidates) {
+                        // 고유 ID 생성 (중복 방지)
+                        const candidatesId = 'candidates_' + Date.now() + Math.random().toString(36).substr(2, 9);
+                        
+                        // 데이터를 전역 변수에 저장 (JSON.stringify 문제 방지)
+                        window[candidatesId] = allCandidates;
+                        
+                        sourcesHtml += `
+                            <button 
+                                onclick='showAllCandidates("${candidatesId}")'
+                                class="mt-3 w-full px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                            >
+                                <i class="fas fa-list"></i>
+                                <span>전체 관련 FAQ ${allCandidates.length}개 보기</span>
+                            </button>
+                        `;
+                    }
+                    
+                    sourcesHtml += `</div>`;
                 }
                 
                 messageDiv.innerHTML = `
@@ -379,55 +416,153 @@
         }
         
         // ========================================
-        // FAQ 모달 함수
+        // 전체 후보 FAQ 모달 표시 ✅ 수정
         // ========================================
-        function openFaqModal(faq) {
-            // 모달 요소
+        function showAllCandidates(candidatesId) {
+            const candidates = window[candidatesId];
+            
+            if (!candidates || !Array.isArray(candidates)) {
+                console.error('후보 데이터를 찾을 수 없습니다');
+                return;
+            }
+            
             const modal = document.getElementById('faqModal');
-            const modalCategory = document.getElementById('modalCategory');
-            const modalDomain = document.getElementById('modalDomain');
-            const modalCohort = document.getElementById('modalCohort');
-            const modalAuthor = document.getElementById('modalAuthor');
-            const modalKeywords = document.getElementById('modalKeywords');
-            const modalQuestion = document.getElementById('modalQuestion');
-            const modalAnswer = document.getElementById('modalAnswer');
+            const modalContent = modal.querySelector('.modal');
             
-            // 데이터 채우기
-            modalCategory.textContent = `📁 ${faq.category}`;
-            modalDomain.textContent = `🌐 ${faq.domain}`;
-            modalCohort.textContent = `🎓 ${faq.cohort}`;
-            modalAuthor.textContent = `✍️ ${faq.author}`;
+            // 유사도 순으로 정렬 (내림차순) ✅
+            const sortedCandidates = [...candidates].sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
             
-            // 키워드
-            modalKeywords.innerHTML = faq.keywords.map(kw => 
-                `<span class="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded">${escapeHtml(kw)}</span>`
-            ).join('');
+            // 모달 내용을 전체 후보 리스트로 변경
+            modalContent.innerHTML = `
+                <div class="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between z-10">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                            <i class="fas fa-list text-white"></i>
+                        </div>
+                        <h2 class="text-xl font-bold text-gray-800">전체 관련 FAQ (${sortedCandidates.length}개)</h2>
+                    </div>
+                    <button onclick="closeFaqModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+                
+                <div class="p-6 space-y-3 max-h-[70vh] overflow-y-auto">
+                    ${sortedCandidates.map((faq, idx) => {
+                        const keywords = (faq.keywords || []).filter(k => k && k.trim()).slice(0, 3);
+                        const keywordHtml = keywords.length > 0 
+                            ? keywords.map(kw => `<span class="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded">${escapeHtml(kw)}</span>`).join('')
+                            : '<span class="text-xs text-gray-400">키워드 없음</span>';
+                        
+                        // 유사도에 따른 배경색 ✅
+                        const similarity = (faq.similarity || 0) * 100;
+                        let bgColor = 'bg-gray-50';
+                        if (similarity >= 90) bgColor = 'bg-green-50';
+                        else if (similarity >= 80) bgColor = 'bg-blue-50';
+                        else if (similarity >= 70) bgColor = 'bg-yellow-50';
+                        
+                        return `
+                            <div class="faq-card p-4 ${bgColor} rounded-lg hover:shadow-md transition-all cursor-pointer border border-gray-200"
+                                onclick='openFaqDetailModal(${JSON.stringify(faq).replace(/'/g, "&#39;").replace(/"/g, "&quot;")})'>
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-2 flex-wrap">
+                                            <span class="text-sm font-bold text-blue-600">#${idx + 1}</span>
+                                            <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">${escapeHtml(faq.category || '기타')}</span>
+                                            <span class="px-2 py-1 ${similarity >= 80 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'} text-xs rounded font-medium">
+                                                💯 ${similarity.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                        <p class="text-sm font-medium text-gray-800 mb-2">${escapeHtml(faq.question || '질문 없음')}</p>
+                                        <p class="text-xs text-gray-500 line-clamp-2 mb-2">${escapeHtml((faq.answer || '').substring(0, 100))}...</p>
+                                        <div class="flex flex-wrap gap-1">
+                                            ${keywordHtml}
+                                        </div>
+                                    </div>
+                                    <i class="fas fa-chevron-right text-gray-400"></i>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
             
-            // 질문
-            modalQuestion.textContent = faq.question;
-            
-            // 답변 (마크다운 렌더링)
-            modalAnswer.innerHTML = marked.parse(faq.answer);
-            
-            // 모달 표시
             modal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';  // 배경 스크롤 방지
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // ========================================
+        // FAQ 상세 모달
+        // ========================================
+        function openFaqDetailModal(faq) {
+            const modal = document.getElementById('faqModal');
+            const modalContent = modal.querySelector('.modal');
+            
+            const keywords = (faq.keywords || []).filter(k => k && k.trim());
+            const keywordHtml = keywords.length > 0
+                ? keywords.map(kw => `<span class="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded">${escapeHtml(kw)}</span>`).join('')
+                : '<span class="text-xs text-gray-400">키워드 없음</span>';
+            
+            modalContent.innerHTML = `
+                <div class="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between z-10">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                            <i class="fas fa-file-alt text-white"></i>
+                        </div>
+                        <h2 class="text-xl font-bold text-gray-800">FAQ 상세 정보</h2>
+                    </div>
+                    <button onclick="closeFaqModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+                
+                <div class="p-6">
+                    <div class="flex flex-wrap gap-2 mb-6">
+                        <span class="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">📁 ${escapeHtml(faq.category || '기타')}</span>
+                        <span class="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full">🌐 ${escapeHtml(faq.domain || '무관')}</span>
+                        <span class="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">🎓 ${escapeHtml(faq.cohort || '-')}</span>
+                        <span class="px-3 py-1 bg-orange-100 text-orange-800 text-sm font-medium rounded-full">✍️ ${escapeHtml(faq.author || '익명')}</span>
+                        ${faq.similarity ? `<span class="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-medium rounded-full">💯 ${(faq.similarity * 100).toFixed(1)}%</span>` : ''}
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-2">🏷️ 키워드</h3>
+                        <div class="flex flex-wrap gap-2">
+                            ${keywordHtml}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h3 class="text-sm font-semibold text-gray-500 mb-2">❓ 질문</h3>
+                        <div class="bg-gray-50 rounded-lg p-4 text-gray-800">${escapeHtml(faq.question || '질문 없음')}</div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-500 mb-2">💡 답변</h3>
+                        <div class="bg-blue-50 rounded-lg p-4 text-gray-800 markdown-content">${marked.parse(faq.answer || '답변 없음')}</div>
+                    </div>
+                </div>
+            `;
+            
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function openFaqModal(faq) {
+            openFaqDetailModal(faq);
         }
         
         function closeFaqModal() {
             const modal = document.getElementById('faqModal');
             modal.classList.add('hidden');
-            document.body.style.overflow = 'auto';  // 스크롤 복원
+            document.body.style.overflow = 'auto';
         }
         
-        // ESC 키로 모달 닫기
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
                 closeFaqModal();
             }
         });
         
-        // 모달 배경 클릭 시 닫기
         document.getElementById('faqModal').addEventListener('click', function(event) {
             if (event.target === this) {
                 closeFaqModal();
@@ -475,17 +610,13 @@
                 return;
             }
             
-            // 사용자 메시지 표시
             addMessage(question, true);
             userInput.value = '';
-            
-            // 타이핑 표시
             showTypingIndicator();
             
             try {
                 const category = categoryFilter.value || null;
                 
-                // API 호출
                 const response = await fetch(`${API_BASE_URL}/api/rag/query`, {
                     method: 'POST',
                     headers: {
@@ -494,8 +625,10 @@
                     body: JSON.stringify({
                         question: question,
                         k: 3,
+                        search_k: 10,
                         category: category,
-                        return_sources: true
+                        return_sources: true,
+                        return_all_candidates: true
                     })
                 });
                 
@@ -505,11 +638,12 @@
                 
                 const data = await response.json();
                 
-                // 타이핑 숨기기
-                hideTypingIndicator();
+                console.log('API Response:', data);  // ✅ 디버깅용
+                console.log('Sources:', data.sources);
+                console.log('All Candidates:', data.all_candidates);
                 
-                // 봇 응답 표시
-                addMessage(data.answer, false, data.sources);
+                hideTypingIndicator();
+                addMessage(data.answer, false, data.sources, data.all_candidates);
                 
             } catch (error) {
                 hideTypingIndicator();

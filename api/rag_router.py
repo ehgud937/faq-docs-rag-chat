@@ -23,8 +23,10 @@ class SearchRequest(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(..., description="사용자 질문", min_length=1)
     k: int = Field(3, description="참고할 FAQ 개수", ge=1, le=10)
+    search_k: int = Field(10, description="검색할 전체 FAQ 개수", ge=1, le=30)  
     category: Optional[str] = Field(None, description="카테고리 필터")
     return_sources: bool = Field(True, description="출처 포함 여부")
+    return_all_candidates: bool = Field(True, description="모든 후보 FAQ 포함 여부")
 
 
 class FAQResult(BaseModel):
@@ -43,6 +45,7 @@ class QueryResponse(BaseModel):
     question: str
     answer: str
     sources: Optional[List[FAQResult]] = None
+    all_candidates: Optional[List[FAQResult]] = None
     metadata: Dict
 
 
@@ -85,28 +88,15 @@ async def search_faq(request: SearchRequest):
 async def rag_query(request: QueryRequest):
     """
     RAG 기반 질의응답 (검색 + 답변 생성)
-    
-    - **question**: 사용자 질문
-    - **k**: 참고할 FAQ 개수 (기본 3개)
-    - **category**: 카테고리 필터 (선택)
-    - **return_sources**: 출처 포함 여부 (기본 True)
-    
-    **사용 예시**:
-```json
-    {
-        "question": "JWT 토큰이 디코딩되는데 이게 맞나요?",
-        "k": 3,
-        "category": "BE",
-        "return_sources": true
-    }
-```
     """
     try:
         result = await rag_service.query(
             question=request.question,
             k=request.k,
+            search_k=request.search_k,
             category_filter=request.category,
-            return_sources=request.return_sources
+            return_sources=request.return_sources,
+            return_all_candidates=request.return_all_candidates
         )
         
         return result
